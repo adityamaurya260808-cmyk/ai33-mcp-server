@@ -281,6 +281,66 @@ function buildServer() {
   );
 
   server.registerTool(
+    "list_image_models",
+    {
+      title: "Ai33.Pro List Image Models",
+      description:
+        "Retrieves available Ai33.Pro image generation models with their supported parameters " +
+        "(aspect ratios, resolutions, max generations, etc). Use this to find a model_id for generate_image.",
+      inputSchema: {},
+    },
+    async () => {
+      if (!AI33_API_KEY) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "Server par AI33_API_KEY set nahi hai. Hosting platform ke environment variables mein API key add karo.",
+            },
+          ],
+        };
+      }
+
+      let response;
+      try {
+        response = await fetch("https://api.ai33.pro/v1i/models", {
+          method: "GET",
+          headers: {
+            "xi-api-key": AI33_API_KEY,
+          },
+        });
+      } catch (err) {
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: `Network error calling Ai33.Pro: ${err.message}` },
+          ],
+        };
+      }
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Ai33.Pro API error (${response.status}): ${errText || response.statusText}`,
+            },
+          ],
+        };
+      }
+
+      const data = await response.json();
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      };
+    }
+  );
+
+  server.registerTool(
     "generate_image",
     {
       title: "Ai33.Pro Generate Image",
@@ -293,6 +353,13 @@ function buildServer() {
           .string()
           .max(4000)
           .describe("Image description (max 4000 characters)."),
+        model_id: z
+          .string()
+          .default("bytedance-seedream-4.5")
+          .describe(
+            "Which image model to use. Default is bytedance-seedream-4.5. " +
+              "Use the list_image_models tool to see other available model ids."
+          ),
         aspect_ratio: z
           .enum(["16:9", "4:3", "1:1", "3:4", "9:16"])
           .default("16:9")
@@ -303,7 +370,7 @@ function buildServer() {
           .describe("Output resolution."),
       },
     },
-    async ({ prompt, aspect_ratio, resolution }) => {
+    async ({ prompt, model_id, aspect_ratio, resolution }) => {
       if (!AI33_API_KEY) {
         return {
           isError: true,
@@ -323,7 +390,7 @@ function buildServer() {
 
       const formData = new FormData();
       formData.append("prompt", prompt);
-      formData.append("model_id", "bytedance-seedream-4.5");
+      formData.append("model_id", model_id ?? "bytedance-seedream-4.5");
       formData.append("generations_count", "1");
       formData.append("model_parameters", modelParameters);
 
